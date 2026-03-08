@@ -57,7 +57,7 @@ get_current_dayofweek = lambda action: _now(action).strftime("%A")
 SLEEPTIME = 0.1  # 每次抢座的间隔（减少到0.05秒以加快速度）
 ENDTIME = "17:00:40"  # 根据学校的预约座位时间+1min即可
 
-ENABLE_SLIDER = True  # 是否有滑块验证（调试阶段先关闭）
+ENABLE_SLIDER = False  # 是否有滑块验证（调试阶段先关闭）
 ENABLE_TEXTCLICK = False  # 是否有选字验证码（需要图灵云打码平台）
 MAX_ATTEMPT = 30  # 最大尝试次数（减少到30次，确保3个配置都能尝试）
 RESERVE_NEXT_DAY = True  # 预约明天而不是今天的
