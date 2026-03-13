@@ -335,18 +335,20 @@ async function buildTodayDispatchUsers(KV, schoolId, today) {
       ? daySchedule.slots
       : [{ roomid: daySchedule.roomid, seatid: daySchedule.seatid, times: daySchedule.times, seatPageId: daySchedule.seatPageId || "", fidEnc: daySchedule.fidEnc || "" }];
     const activeSlots = rawSlots.filter(s => s.times && s.roomid);
-    for (const slot of activeSlots) {
-      users.push({
-        username: user.phone || user.username,
-        password: user.password,
-        roomid: slot.roomid,
-        seatid: (slot.seatid || "").split(",").map(s => s.trim()).filter(Boolean),
-        times: slot.times,
-        seatPageId: slot.seatPageId || "",
-        fidEnc: slot.fidEnc || "",
-        remark: user.remark || user.username || user.phone,
-      });
-    }
+    if (activeSlots.length === 0) continue;
+
+    users.push({
+      username: user.phone || user.username,
+      password: user.password,
+      remark: user.remark || user.username || user.phone,
+      slots: activeSlots.map(s => ({
+        roomid: s.roomid,
+        seatid: (s.seatid || "").split(",").map(x => x.trim()).filter(Boolean),
+        times: s.times,
+        seatPageId: s.seatPageId || "",
+        fidEnc: s.fidEnc || "",
+      })),
+    });
   }
   return users;
 }
@@ -585,24 +587,22 @@ async function handleAPI(request, env, path) {
       : [{ roomid: daySchedule.roomid, seatid: daySchedule.seatid, times: daySchedule.times, seatPageId: daySchedule.seatPageId || "", fidEnc: daySchedule.fidEnc || "" }];
     const activeSlots = rawSlots.filter(s => s.times && s.roomid);
     if (activeSlots.length === 0) return jsonResp({ error: "No active slots for today" }, 400);
-    let okCount = 0;
-    for (const slot of activeSlots) {
-      const payload = {
-        username: user.phone || user.username,
-        password: user.password,
-        roomid: slot.roomid,
-        seatid: (slot.seatid || "").split(",").map(s => s.trim()).filter(Boolean),
-        times: slot.times,
-        seatPageId: slot.seatPageId || "",
-        fidEnc: slot.fidEnc || "",
-        remark: user.remark || user.username || user.phone,
-        endtime: school.endtime,
-        strategy: school.strategy,
-      };
-      const ok = await dispatchGitHub(env.GH_TOKEN, school.repo, payload);
-      if (ok) okCount++;
-    }
-    return jsonResp({ ok: okCount > 0, dispatched: okCount, total: activeSlots.length });
+    const payload = {
+      username: user.phone || user.username,
+      password: user.password,
+      remark: user.remark || user.username || user.phone,
+      slots: activeSlots.map(s => ({
+        roomid: s.roomid,
+        seatid: (s.seatid || "").split(",").map(x => x.trim()).filter(Boolean),
+        times: s.times,
+        seatPageId: s.seatPageId || "",
+        fidEnc: s.fidEnc || "",
+      })),
+      endtime: school.endtime,
+      strategy: school.strategy,
+    };
+    const ok = await dispatchGitHub(env.GH_TOKEN, school.repo, payload);
+    return jsonResp({ ok, slots: activeSlots.length });
   }
 
   // POST /api/encrypt

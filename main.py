@@ -84,30 +84,44 @@ def _load_runtime_config(config_path, dispatch_mode, action):
         payload = json.loads(payload_raw)
         username = payload.get("username")
         password = payload.get("password")
-        roomid = payload.get("roomid")
-        seatid = payload.get("seatid")
-        times = payload.get("times")
+        slots = payload.get("slots")
 
-        if not all([username, password, roomid, seatid, times]):
+        # 兼容旧格式（单条 roomid/seatid/times）
+        if not slots:
+            roomid = payload.get("roomid")
+            seatid = payload.get("seatid")
+            times = payload.get("times")
+            if roomid and times:
+                slots = [{"roomid": roomid, "seatid": seatid, "times": times,
+                          "seatPageId": payload.get("seatPageId") or "",
+                          "fidEnc": payload.get("fidEnc") or ""}]
+            else:
+                slots = []
+
+        if not username or not password or not slots:
             raise ValueError("DISPATCH_PAYLOAD missing required fields")
 
         decrypted_password = AES_Decrypt(password)
         os.environ["CX_USERNAME"] = username
         os.environ["CX_PASSWORD"] = decrypted_password
+        current_day = get_current_dayofweek(action)
+
+        reserve_list = []
+        for slot in slots:
+            seatid = slot.get("seatid")
+            reserve_list.append({
+                "username": username,
+                "password": decrypted_password,
+                "times": slot.get("times"),
+                "roomid": slot.get("roomid"),
+                "seatid": seatid if isinstance(seatid, list) else [seatid],
+                "seatPageId": slot.get("seatPageId") or "",
+                "fidEnc": slot.get("fidEnc") or "",
+                "daysofweek": [current_day],
+            })
 
         return {
-            "reserve": [
-                {
-                    "username": username,
-                    "password": decrypted_password,
-                    "times": times,
-                    "roomid": roomid,
-                    "seatid": seatid if isinstance(seatid, list) else [seatid],
-                    "seatPageId": payload.get("seatPageId") or "",
-                    "fidEnc": payload.get("fidEnc") or "",
-                    "daysofweek": [get_current_dayofweek(action)],
-                }
-            ],
+            "reserve": reserve_list,
             "strategy": payload.get("strategy", {}),
             "endtime": payload.get("endtime", ENDTIME),
             "relogin_every_loop": False,
