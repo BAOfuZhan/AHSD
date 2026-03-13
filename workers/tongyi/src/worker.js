@@ -140,6 +140,7 @@ function defaultSchool(id, name) {
     trigger_time: "19:57",
     endtime: "20:00:40",
     fidEnc: "",
+    reading_zone_groups: [],
     repo: `BAOfuZhan/${id}`,
     strategy: {
       mode: "C",
@@ -840,7 +841,7 @@ let currentView = "login";
 let currentSchool = null;
 let schools = [];
 let users = [];
-const READING_ZONE_GROUPS = [
+const DEFAULT_READING_ZONE_GROUPS = [
   { floor: "2 楼", zones: [{ id: "13474", name: "西阅览区" }, { id: "13473", name: "东阅览区" }, { id: "13476", name: "西电子阅览区" }, { id: "13472", name: "东电子阅览区" }] },
   { floor: "3 楼", zones: [{ id: "13481", name: "西阅览区" }, { id: "13484", name: "中阅览区" }, { id: "13478", name: "东阅览区" }, { id: "13480", name: "西电子阅览区" }, { id: "13475", name: "东电子阅览区" }] },
   { floor: "4 楼", zones: [{ id: "13487", name: "西阅览区" }, { id: "13490", name: "中阅览区" }, { id: "13489", name: "东阅览区" }, { id: "13485", name: "西电子阅览区" }, { id: "13486", name: "东电子阅览区" }, { id: "13492", name: "南区" }] },
@@ -850,6 +851,13 @@ const READING_ZONE_GROUPS = [
   { floor: "8 楼", zones: [{ id: "13495", name: "西阅览区" }, { id: "13496", name: "中阅览室" }, { id: "13498", name: "东阅览区" }, { id: "13501", name: "电子西阅览区" }, { id: "13503", name: "电子东阅览区" }] },
   { floor: "9 楼", zones: [{ id: "13491", name: "西阅览室" }, { id: "13488", name: "中阅览区" }, { id: "13483", name: "东阅览区" }] },
 ];
+
+function getReadingZoneGroups() {
+  const groups = currentSchool && Array.isArray(currentSchool.reading_zone_groups)
+    ? currentSchool.reading_zone_groups
+    : [];
+  return groups.length ? groups : DEFAULT_READING_ZONE_GROUPS;
+}
 
 async function api(method, path, body = null) {
   const opts = {
@@ -1096,9 +1104,10 @@ function renderSchoolDetail() {
 }
 
 function renderReadingZonePanel() {
+  const groups = getReadingZoneGroups();
   return \`
     <div class="zone-grid">
-      \${READING_ZONE_GROUPS.map(group => \`
+      \${groups.map(group => \`
         <div class="zone-card">
           <div class="zone-floor">\${group.floor}</div>
           <div class="zone-list">
@@ -1121,6 +1130,10 @@ function renderReadingZonePanel() {
 function renderEditSchoolModal() {
   const s = currentSchool || {};
   const st = s.strategy || {};
+  const readingZonesText = JSON.stringify(s.reading_zone_groups || [], null, 2)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
   return \`
     <div class="modal" id="editSchoolModal">
       <div class="modal-content">
@@ -1152,6 +1165,10 @@ function renderEditSchoolModal() {
           <div class="form-group">
             <label>学校统一 fidEnc（全校共用）</label>
             <input type="text" id="edit_school_fidEnc" value="\${s.fidEnc || ''}" placeholder="例如: 1b001674cae092c3">
+          </div>
+          <div class="form-group">
+            <label>阅览区映射 JSON（reading_zone_groups）</label>
+            <textarea id="edit_school_reading_zones" rows="8" placeholder='示例: [{"floor":"3楼","zones":[{"id":"13484","name":"中阅览区"}]}]'>\${readingZonesText}</textarea>
           </div>
           <h4 style="margin:20px 0 12px">策略配置</h4>
           <div class="form-row">
@@ -1392,12 +1409,24 @@ async function doEditSchool() {
   };
   const delayRange = parseRangeInput("edit_strategy_delay_range", 45, 45);
   const burstJitterRange = parseRangeInput("edit_strategy_burst_jitter", 0, 0);
+  const readingZonesRaw = (document.getElementById("edit_school_reading_zones").value || "").trim();
+  let readingZoneGroups = [];
+  if (readingZonesRaw) {
+    try {
+      const parsed = JSON.parse(readingZonesRaw);
+      if (!Array.isArray(parsed)) return toast("阅览区映射 JSON 必须是数组", "error");
+      readingZoneGroups = parsed;
+    } catch (e) {
+      return toast("阅览区映射 JSON 解析失败: " + (e.message || String(e)), "error");
+    }
+  }
   const body = {
     name: document.getElementById("edit_school_name").value.trim(),
     repo: document.getElementById("edit_school_repo").value.trim(),
     trigger_time: document.getElementById("edit_school_trigger").value.trim(),
     endtime: document.getElementById("edit_school_endtime").value.trim(),
     fidEnc: document.getElementById("edit_school_fidEnc").value.trim(),
+    reading_zone_groups: readingZoneGroups,
     strategy: {
       ...s.strategy,
       mode: document.getElementById("edit_strategy_mode").value,
