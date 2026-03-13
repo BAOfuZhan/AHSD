@@ -131,6 +131,7 @@ function defaultSchool(id, name) {
     name,
     trigger_time: "19:57",
     endtime: "20:00:40",
+    fidEnc: "",
     repo: `BAOfuZhan/${id}`,
     strategy: {
       mode: "C",
@@ -320,7 +321,7 @@ function chunkArray(arr, size) {
   return chunks;
 }
 
-async function buildTodayDispatchUsers(KV, schoolId, today) {
+async function buildTodayDispatchUsers(KV, schoolId, school, today) {
   const userIds = await getSchoolUsers(KV, schoolId);
   const users = [];
   for (const userId of userIds) {
@@ -346,7 +347,7 @@ async function buildTodayDispatchUsers(KV, schoolId, today) {
         seatid: (s.seatid || "").split(",").map(x => x.trim()).filter(Boolean),
         times: s.times,
         seatPageId: s.seatPageId || "",
-        fidEnc: s.fidEnc || "",
+        fidEnc: school?.fidEnc || s.fidEnc || "",
       })),
     });
   }
@@ -391,7 +392,7 @@ async function handleScheduled(env) {
     const school = await getSchool(env.SEAT_KV, schoolId);
     if (!school || school.trigger_time !== now) continue;
 
-    const users = await buildTodayDispatchUsers(env.SEAT_KV, schoolId, today);
+    const users = await buildTodayDispatchUsers(env.SEAT_KV, schoolId, school, today);
     if (users.length === 0) continue;
     const result = await dispatchUsersInBatches(env, school, users);
     console.log(
@@ -429,6 +430,7 @@ async function handleAPI(request, env, path) {
     if (body.repo) school.repo = body.repo;
     if (body.trigger_time) school.trigger_time = body.trigger_time;
     if (body.endtime) school.endtime = body.endtime;
+    if (body.fidEnc !== undefined) school.fidEnc = body.fidEnc;
     await saveSchool(KV, school);
     const schools = await getSchools(KV);
     if (!schools.includes(id)) {
@@ -557,7 +559,7 @@ async function handleAPI(request, env, path) {
     const school = await getSchool(KV, schoolId);
     if (!school) return jsonResp({ error: "School not found" }, 404);
     const today = beijingDayOfWeek();
-    const users = await buildTodayDispatchUsers(KV, schoolId, today);
+    const users = await buildTodayDispatchUsers(KV, schoolId, school, today);
     if (users.length === 0) {
       return jsonResp({ ok: true, triggeredUsers: 0, okBatches: 0, totalBatches: 0 });
     }
@@ -596,7 +598,7 @@ async function handleAPI(request, env, path) {
         seatid: (s.seatid || "").split(",").map(x => x.trim()).filter(Boolean),
         times: s.times,
         seatPageId: s.seatPageId || "",
-        fidEnc: s.fidEnc || "",
+        fidEnc: school.fidEnc || s.fidEnc || "",
       })),
       endtime: school.endtime,
       strategy: school.strategy,
@@ -746,6 +748,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .zone-list{display:grid;gap:6px}
 .zone-item{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#555;padding:6px 8px;background:#fff;border-radius:6px}
 .zone-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#667eea;background:#eef1ff;padding:2px 6px;border-radius:999px}
+.zone-right{display:flex;align-items:center;gap:6px}
+.copy-btn{border:none;background:#f0f2f7;color:#4b5563;border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer}
+.copy-btn:hover{background:#e5e9f3}
 </style>
 </head>
 <body>
@@ -784,6 +789,24 @@ function toast(msg, type = "success") {
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3000);
+}
+
+async function copyRoomId(id) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(id);
+    } else {
+      const input = document.createElement("input");
+      input.value = id;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      input.remove();
+    }
+    toast("已复制 ID: " + id);
+  } catch (e) {
+    toast("复制失败，请手动复制", "error");
+  }
 }
 
 function render() {
@@ -872,6 +895,10 @@ function renderAddSchoolModal() {
               <input type="text" id="new_school_endtime" value="20:00:40" placeholder="HH:MM:SS">
             </div>
           </div>
+          <div class="form-group">
+            <label>学校统一 fidEnc（全校共用）</label>
+            <input type="text" id="new_school_fidEnc" placeholder="例如: 1b001674cae092c3">
+          </div>
           <button class="btn btn-primary" onclick="doAddSchool()" style="width:100%;margin-top:10px">创建学校</button>
         </div>
       </div>
@@ -906,6 +933,7 @@ function renderSchoolDetail() {
           <div><strong>触发时间:</strong> \${s.trigger_time}</div>
           <div><strong>截止时间:</strong> \${s.endtime}</div>
           <div><strong>GitHub仓库:</strong> \${s.repo}</div>
+          <div><strong>学校 fidEnc:</strong> \${s.fidEnc || "-"}</div>
         </div>
       </div>
       <div class="card">
@@ -978,7 +1006,10 @@ function renderReadingZonePanel() {
             \${group.zones.map(z => \`
               <div class="zone-item">
                 <span>\${z.name}</span>
-                <span class="zone-id">\${z.id}</span>
+                <div class="zone-right">
+                  <span class="zone-id">\${z.id}</span>
+                  <button class="copy-btn" onclick="copyRoomId('\${z.id}')">复制</button>
+                </div>
               </div>
             \`).join("")}
           </div>
@@ -1018,6 +1049,10 @@ function renderEditSchoolModal() {
               <label>截止时间 (HH:MM:SS)</label>
               <input type="text" id="edit_school_endtime" value="\${s.endtime || '20:00:40'}">
             </div>
+          </div>
+          <div class="form-group">
+            <label>学校统一 fidEnc（全校共用）</label>
+            <input type="text" id="edit_school_fidEnc" value="\${s.fidEnc || ''}" placeholder="例如: 1b001674cae092c3">
           </div>
           <h4 style="margin:20px 0 12px">策略配置</h4>
           <div class="form-row">
@@ -1190,8 +1225,9 @@ async function doAddSchool() {
   const repo = document.getElementById("new_school_repo").value.trim();
   const trigger_time = document.getElementById("new_school_trigger").value.trim();
   const endtime = document.getElementById("new_school_endtime").value.trim();
+  const fidEnc = document.getElementById("new_school_fidEnc").value.trim();
   if (!id || !name) return toast("请填写必要信息", "error");
-  const res = await api("POST", "/api/school", { id, name, repo, trigger_time, endtime });
+  const res = await api("POST", "/api/school", { id, name, repo, trigger_time, endtime, fidEnc });
   if (res.ok) {
     let msg = "学校添加成功";
     if (res.repoInit) {
@@ -1244,6 +1280,7 @@ async function doEditSchool() {
     repo: document.getElementById("edit_school_repo").value.trim(),
     trigger_time: document.getElementById("edit_school_trigger").value.trim(),
     endtime: document.getElementById("edit_school_endtime").value.trim(),
+    fidEnc: document.getElementById("edit_school_fidEnc").value.trim(),
     strategy: {
       ...s.strategy,
       mode: document.getElementById("edit_strategy_mode").value,
