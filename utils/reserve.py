@@ -352,6 +352,7 @@ class reserve:
         跳过 TCP 三次握手 + TLS 协商，节省约 100-200ms。
         """
         try:
+            logging.info(f"[warm] Start connection pre-warm request via {url}")
             self._get(
                 url=url,
                 verify=False,
@@ -359,9 +360,8 @@ class reserve:
                 attempts=1,
                 request_name="[warm] connection pre-warm",
             )
-            logging.info(f"[warm] Connection pre-warmed via {url}")
-        except Exception as e:
-            logging.warning(f"[warm] Failed to warm connection: {e}")
+        except Exception:
+            pass
 
     def get_login_status(self, attempts=None):
         self.requests.headers = self.login_headers
