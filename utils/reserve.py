@@ -140,6 +140,7 @@ class reserve:
         self.enable_textclick = enable_textclick
         self.reserve_next_day = reserve_next_day
         self._captcha_context = {}
+        self._warm_pool_snapshot = {}
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
     def set_captcha_context(
@@ -230,6 +231,64 @@ class reserve:
         )
         return token_matches[0] if token_matches else ""
 
+    def _get_connection_pool_state(self, url: str) -> dict:
+        """读取 requests/urllib3 连接池状态，用于判断是否复用预热连接。"""
+        try:
+            adapter = self.requests.get_adapter(url=url)
+            pool = adapter.get_connection(url)
+            parsed = urlparse(str(url or ""))
+            return {
+                "pool_key": f"{parsed.scheme}://{parsed.netloc}",
+                "num_connections": getattr(pool, "num_connections", None),
+                "num_requests": getattr(pool, "num_requests", None),
+            }
+        except Exception as e:
+            logging.debug(f"Failed to inspect connection pool state for {url}: {e}")
+            return {
+                "pool_key": "",
+                "num_connections": None,
+                "num_requests": None,
+            }
+
+    def _describe_probe_connection_reuse(self, url: str, before_state: dict, after_state: dict) -> str:
+        """基于连接池计数推断轻探测是否复用了预热连接。"""
+        pool_key = after_state.get("pool_key") or before_state.get("pool_key") or ""
+        before_conn = before_state.get("num_connections")
+        after_conn = after_state.get("num_connections")
+        before_req = before_state.get("num_requests")
+        after_req = after_state.get("num_requests")
+        warm_state = self._warm_pool_snapshot.get(pool_key, {})
+        warm_conn = warm_state.get("num_connections")
+
+        if not pool_key:
+            return "pool=unknown, reused=unknown"
+
+        if isinstance(before_conn, int) and isinstance(after_conn, int):
+            if after_conn > before_conn:
+                return (
+                    f"pool={pool_key}, reused=no, reason=num_connections {before_conn}->{after_conn}"
+                    f", num_requests {before_req}->{after_req}, warm_num_connections={warm_conn}"
+                )
+            if (
+                isinstance(warm_conn, int)
+                and before_conn >= warm_conn >= 1
+                and after_conn == before_conn
+            ):
+                return (
+                    f"pool={pool_key}, reused=yes, reason=num_connections stayed {before_conn}"
+                    f", num_requests {before_req}->{after_req}, warm_num_connections={warm_conn}"
+                )
+            return (
+                f"pool={pool_key}, reused=likely, reason=num_connections stayed {before_conn}"
+                f", num_requests {before_req}->{after_req}, warm_num_connections={warm_conn}"
+            )
+
+        return (
+            f"pool={pool_key}, reused=unknown, reason=pool counters unavailable"
+            f", num_connections {before_conn}->{after_conn}, num_requests {before_req}->{after_req}"
+            f", warm_num_connections={warm_conn}"
+        )
+
     def should_skip_followup_submit(self) -> bool:
         if not isinstance(self.last_submit_result, dict):
             return False
@@ -292,6 +351,7 @@ class reserve:
                 "value": str,
             }
         """
+        before_pool_state = self._get_connection_pool_state(url)
         try:
             response = self._get(
                 url=url,
@@ -307,6 +367,16 @@ class reserve:
                 "treat as open and switch to formal token fetch"
             )
             return {"is_not_open": False, "token": "", "value": ""}
+
+        after_pool_state = self._get_connection_pool_state(url)
+        logging.info(
+            "Fast not-open probe connection reuse check: %s",
+            self._describe_probe_connection_reuse(
+                url,
+                before_pool_state,
+                after_pool_state,
+            ),
+        )
 
         response_url = getattr(response, "url", "")
         status_code = getattr(response, "status_code", None)
@@ -473,6 +543,16 @@ class reserve:
                 timeout=5,
                 attempts=1,
                 request_name="[warm] connection pre-warm",
+            )
+            pool_state = self._get_connection_pool_state(url)
+            pool_key = pool_state.get("pool_key", "")
+            if pool_key:
+                self._warm_pool_snapshot[pool_key] = pool_state
+            logging.info(
+                "[warm] Connection pool snapshot after pre-warm: pool=%s, num_connections=%s, num_requests=%s",
+                pool_key or "unknown",
+                pool_state.get("num_connections"),
+                pool_state.get("num_requests"),
             )
         except Exception:
             pass
