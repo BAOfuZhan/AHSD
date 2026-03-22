@@ -105,8 +105,8 @@ MAX_ATTEMPT = 1
 SLEEPTIME = 0.05  # 每次抢座的间隔（减少到0.05秒以加快速度）
 WARM_CONNECTION_LEAD_MS = 2400  # 连接预热提前量（毫秒）
 FIRST_TOKEN_DATE_MODE = "submit_date"  # 首次取 token 的日期：today 或 submit_date
-FAST_PROBE_START_OFFSET_MS = 10  # 目标时间后多少毫秒开始轻探测
-FAST_PROBE_INTERVAL_MS = 5  # 轻探测轮询间隔（毫秒）
+FAST_PROBE_START_OFFSET_MS = 25  # 目标时间后多少毫秒开始轻探测
+FAST_PROBE_INTERVAL_MS = 2  # 轻探测轮询间隔（毫秒）
 FAST_PROBE_DEADLINE_MS = 1200  # 目标时间后多久强制结束轻探测并正式取 token
 
 
