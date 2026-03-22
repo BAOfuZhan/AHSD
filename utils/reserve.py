@@ -261,13 +261,13 @@ class reserve:
         warm_conn = warm_state.get("num_connections")
 
         if not pool_key:
-            return "pool=unknown, reused=unknown"
+            return "连接池=未知，是否复用=未知"
 
         if isinstance(before_conn, int) and isinstance(after_conn, int):
             if after_conn > before_conn:
                 return (
-                    f"pool={pool_key}, reused=no, reason=num_connections {before_conn}->{after_conn}"
-                    f", num_requests {before_req}->{after_req}, warm_num_connections={warm_conn}"
+                    f"连接池={pool_key}，是否复用=否，原因=连接数 {before_conn}->{after_conn}"
+                    f"，请求数 {before_req}->{after_req}，预热后连接数={warm_conn}"
                 )
             if (
                 isinstance(warm_conn, int)
@@ -275,18 +275,18 @@ class reserve:
                 and after_conn == before_conn
             ):
                 return (
-                    f"pool={pool_key}, reused=yes, reason=num_connections stayed {before_conn}"
-                    f", num_requests {before_req}->{after_req}, warm_num_connections={warm_conn}"
+                    f"连接池={pool_key}，是否复用=是，原因=连接数保持 {before_conn}"
+                    f"，请求数 {before_req}->{after_req}，预热后连接数={warm_conn}"
                 )
             return (
-                f"pool={pool_key}, reused=likely, reason=num_connections stayed {before_conn}"
-                f", num_requests {before_req}->{after_req}, warm_num_connections={warm_conn}"
+                f"连接池={pool_key}，是否复用=大概率是，原因=连接数保持 {before_conn}"
+                f"，请求数 {before_req}->{after_req}，预热后连接数={warm_conn}"
             )
 
         return (
-            f"pool={pool_key}, reused=unknown, reason=pool counters unavailable"
-            f", num_connections {before_conn}->{after_conn}, num_requests {before_req}->{after_req}"
-            f", warm_num_connections={warm_conn}"
+            f"连接池={pool_key}，是否复用=未知，原因=连接池计数不可用"
+            f"，连接数 {before_conn}->{after_conn}，请求数 {before_req}->{after_req}"
+            f"，预热后连接数={warm_conn}"
         )
 
     def should_skip_followup_submit(self) -> bool:
@@ -337,7 +337,7 @@ class reserve:
     def _post(self, url, **kwargs):
         return self._request_with_retry("POST", url, **kwargs)
 
-    def probe_not_open_fast(self, url):
+    def probe_not_open_fast(self, url, *, log_connection_reuse: bool = False):
         """轻量探测选座页是否仍处于“未开放”状态。
 
         只发起一次 GET。
@@ -351,7 +351,9 @@ class reserve:
                 "value": str,
             }
         """
-        before_pool_state = self._get_connection_pool_state(url)
+        before_pool_state = (
+            self._get_connection_pool_state(url) if log_connection_reuse else None
+        )
         try:
             response = self._get(
                 url=url,
@@ -368,15 +370,16 @@ class reserve:
             )
             return {"is_not_open": False, "token": "", "value": ""}
 
-        after_pool_state = self._get_connection_pool_state(url)
-        logging.info(
-            "Fast not-open probe connection reuse check: %s",
-            self._describe_probe_connection_reuse(
-                url,
-                before_pool_state,
-                after_pool_state,
-            ),
-        )
+        if log_connection_reuse:
+            after_pool_state = self._get_connection_pool_state(url)
+            logging.info(
+                "第一枪轻探测连接复用检查：%s",
+                self._describe_probe_connection_reuse(
+                    url,
+                    before_pool_state or {},
+                    after_pool_state,
+                ),
+            )
 
         response_url = getattr(response, "url", "")
         status_code = getattr(response, "status_code", None)
@@ -549,7 +552,7 @@ class reserve:
             if pool_key:
                 self._warm_pool_snapshot[pool_key] = pool_state
             logging.info(
-                "[warm] Connection pool snapshot after pre-warm: pool=%s, num_connections=%s, num_requests=%s",
+                "[warm] 连接预热后的连接池快照：连接池=%s，连接数=%s，请求数=%s",
                 pool_key or "unknown",
                 pool_state.get("num_connections"),
                 pool_state.get("num_requests"),

@@ -295,7 +295,10 @@ def _probe_then_get_page_token(
     probe_attempt = 0
     while True:
         probe_attempt += 1
-        probe_result = s.probe_not_open_fast(token_url)
+        probe_result = s.probe_not_open_fast(
+            token_url,
+            log_connection_reuse=(probe_attempt == 1),
+        )
         probe_checked_dt = _beijing_now()
         elapsed_ms = max(0.0, (probe_checked_dt - target_dt).total_seconds() * 1000)
         if probe_result.get("is_not_open"):
