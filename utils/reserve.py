@@ -100,8 +100,8 @@ class reserve:
             float(os.getenv("CX_READ_TIMEOUT", "5")),
         )
         self.fast_probe_timeout = (
-            float(os.getenv("CX_FAST_PROBE_CONNECT_TIMEOUT", "0.34")),
-            float(os.getenv("CX_FAST_PROBE_READ_TIMEOUT", "0.34")),
+            float(os.getenv("CX_FAST_PROBE_CONNECT_TIMEOUT", "0.36")),
+            float(os.getenv("CX_FAST_PROBE_READ_TIMEOUT", "0.36")),
         )
         self.request_attempts = max(1, int(os.getenv("CX_REQUEST_ATTEMPTS", "3")))
         self.request_retry_delay = float(os.getenv("CX_REQUEST_RETRY_DELAY", "0.2"))
