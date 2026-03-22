@@ -307,7 +307,7 @@ class reserve:
         if kind == "warm":
             self._warm_request_trace = trace
             logging.info(
-                "[warm] 发送层连接池追踪：连接池=%s，池对象=%s，发送前连接数=%s，请求数=%s，发送后连接数=%s，请求数=%s，状态码=%s",
+                "[warm] 连接追踪：连接池=%s，池对象=%s，发送前连接数=%s，请求数=%s，发送后连接数=%s，请求数=%s，状态码=%s",
                 after.get("pool_key") or before.get("pool_key") or "未知",
                 after.get("pool_id") or before.get("pool_id") or "未知",
                 before.get("num_connections"),
@@ -320,7 +320,7 @@ class reserve:
 
         if kind == "first_fast_probe":
             logging.info(
-                "第一枪轻探测发送层连接复用检查：%s",
+                "第一枪轻探测连接复用：%s",
                 self._describe_first_probe_reuse_from_trace(trace),
             )
 
@@ -370,7 +370,7 @@ class reserve:
                 )
             if probe_after_conn == warm_conn and probe_after_req > warm_req:
                 return (
-                    f"连接池={pool_key}，是否复用=大概率是，原因=预热后连接数保持 {warm_conn}，"
+                    f"连接池={pool_key}，是否复用=是，原因=预热后连接数保持 {warm_conn}，"
                     f"请求数 {warm_req}->{probe_after_req}；池对象={probe_pool_id or warm_pool_id or '未知'}"
                 )
 
